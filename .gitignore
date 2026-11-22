@@ -1,0 +1,34 @@
+# Visual Studio & MSBuild
+.vs/
+*.obj
+*.pdb
+*.ilk
+*.tlog
+*.idb
+*.lastbuildstate
+*.log
+*.unsuccessfulbuild
+x64/
+Win32/
+Debug/
+Release/
+foobar2000/*/x64/
+foobar2000/*/Debug/
+foobar2000/*/Release/
+foobar2000/*/*.tlog/
+libPPUI/x64/
+libPPUI/Debug/
+libPPUI/Release/
+pfc/x64/
+pfc/Debug/
+pfc/Release/
+
+# Rust
+target/
+Cargo.lock
+
+# OS / Editor
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
