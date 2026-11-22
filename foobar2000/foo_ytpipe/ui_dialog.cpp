@@ -71,6 +71,62 @@ constexpr int IDC_URL_ADD_BTN = 2004;
 constexpr int IDC_URL_CANCEL_BTN = 2005;
 
 constexpr UINT WM_SEARCH_FINISHED = WM_USER + 101;
+constexpr UINT_PTR SUBCLASS_ID_DLGCTRL = 9001;
+
+// Subclass procedure for all child controls:
+// Guarantees TAB / Shift+TAB navigation, ENTER handling, and ESCAPE closing without beeping!
+LRESULT CALLBACK DlgControlSubclassProc(
+    HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+    UINT_PTR uIdSubclass, DWORD_PTR dwRefData
+) {
+    (void)uIdSubclass; (void)dwRefData;
+
+    switch (uMsg) {
+    case WM_GETDLGCODE: {
+        // Tell Windows this control participates in keyboard navigation
+        LRESULT code = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        return code | DLGC_WANTTAB | DLGC_WANTARROWS;
+    }
+
+    case WM_KEYDOWN: {
+        HWND hParent = GetParent(hWnd);
+
+        if (wParam == VK_TAB) {
+            bool bShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            HWND hNext = GetNextDlgTabItem(hParent, hWnd, bShift ? TRUE : FALSE);
+            if (hNext && hNext != hWnd) {
+                SetFocus(hNext);
+                return 0; // Handled, suppresses warning beep!
+            }
+        }
+        else if (wParam == VK_ESCAPE) {
+            PostMessageW(hParent, WM_CLOSE, 0, 0);
+            return 0;
+        }
+        else if (wParam == VK_RETURN) {
+            int ctrlId = (int)GetWindowLongPtrW(hWnd, GWLP_ID);
+            if (ctrlId == IDC_QUERY_EDIT) {
+                // Enter in search edit box immediately initiates search
+                SendMessageW(hParent, WM_COMMAND, MAKEWPARAM(IDC_SEARCH_BTN, BN_CLICKED), (LPARAM)hWnd);
+                return 0;
+            }
+            else if (ctrlId == IDC_RESULTS_LIST) {
+                // Enter in results list immediately plays selected track
+                SendMessageW(hParent, WM_COMMAND, MAKEWPARAM(IDC_PLAY_BTN, BN_CLICKED), (LPARAM)hWnd);
+                return 0;
+            }
+            else if (ctrlId == IDC_URL_EDIT) {
+                // Enter in URL box triggers Play Now
+                SendMessageW(hParent, WM_COMMAND, MAKEWPARAM(IDC_URL_PLAY_BTN, BN_CLICKED), (LPARAM)hWnd);
+                return 0;
+            }
+        }
+        break;
+    }
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
 
 class SearchDialogState {
 public:
@@ -111,50 +167,70 @@ void SearchCallbackFn(
 LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
+        // Register modeless dialog with foobar2000 message loop
+        modeless_dialog_manager::g_add(hwnd);
+
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
+        // 1. Static Label for Query
         CreateWindowW(L"STATIC", L"Search &Query:", WS_CHILD | WS_VISIBLE,
-            15, 15, 100, 20, hwnd, (HMENU)(INT_PTR)IDC_QUERY_LABEL, GetModuleHandle(nullptr), nullptr);
+            15, 18, 100, 20, hwnd, (HMENU)(INT_PTR)IDC_QUERY_LABEL, GetModuleHandle(nullptr), nullptr);
 
+        // 2. Query Edit box (Tab order 1)
         g_search_state->hQueryEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-            120, 12, 380, 24, hwnd, (HMENU)(INT_PTR)IDC_QUERY_EDIT, GetModuleHandle(nullptr), nullptr);
+            120, 15, 380, 25, hwnd, (HMENU)(INT_PTR)IDC_QUERY_EDIT, GetModuleHandle(nullptr), nullptr);
 
+        // 3. Search Button (Tab order 2)
         g_search_state->hSearchBtn = CreateWindowW(L"BUTTON", L"&Search",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-            510, 12, 90, 25, hwnd, (HMENU)(INT_PTR)IDC_SEARCH_BTN, GetModuleHandle(nullptr), nullptr);
+            510, 15, 100, 26, hwnd, (HMENU)(INT_PTR)IDC_SEARCH_BTN, GetModuleHandle(nullptr), nullptr);
 
+        // 4. Static Label for Results
         CreateWindowW(L"STATIC", L"Search &Results:", WS_CHILD | WS_VISIBLE,
-            15, 45, 120, 20, hwnd, (HMENU)(INT_PTR)IDC_RESULTS_LABEL, GetModuleHandle(nullptr), nullptr);
+            15, 52, 120, 20, hwnd, (HMENU)(INT_PTR)IDC_RESULTS_LABEL, GetModuleHandle(nullptr), nullptr);
 
+        // 5. Results ListBox (Tab order 3)
         g_search_state->hResultsList = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT,
-            15, 68, 585, 300, hwnd, (HMENU)(INT_PTR)IDC_RESULTS_LIST, GetModuleHandle(nullptr), nullptr);
+            15, 75, 595, 315, hwnd, (HMENU)(INT_PTR)IDC_RESULTS_LIST, GetModuleHandle(nullptr), nullptr);
 
-        g_search_state->hStatusLabel = CreateWindowW(L"STATIC", L"Ready. Enter query and press Search.",
+        // 6. Status Label
+        g_search_state->hStatusLabel = CreateWindowW(L"STATIC", L"Ready. Type your query and press Enter or Search.",
             WS_CHILD | WS_VISIBLE,
-            15, 378, 300, 20, hwnd, (HMENU)(INT_PTR)IDC_STATUS_LABEL, GetModuleHandle(nullptr), nullptr);
+            15, 408, 290, 22, hwnd, (HMENU)(INT_PTR)IDC_STATUS_LABEL, GetModuleHandle(nullptr), nullptr);
 
+        // 7. Play Selected Button (Tab order 4)
         g_search_state->hPlayBtn = CreateWindowW(L"BUTTON", L"&Play Selected",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            320, 375, 100, 26, hwnd, (HMENU)(INT_PTR)IDC_PLAY_BTN, GetModuleHandle(nullptr), nullptr);
+            310, 404, 105, 28, hwnd, (HMENU)(INT_PTR)IDC_PLAY_BTN, GetModuleHandle(nullptr), nullptr);
 
+        // 8. Add to Playlist Button (Tab order 5)
         g_search_state->hAddBtn = CreateWindowW(L"BUTTON", L"&Add to Playlist",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            425, 375, 110, 26, hwnd, (HMENU)(INT_PTR)IDC_ADD_BTN, GetModuleHandle(nullptr), nullptr);
+            425, 404, 115, 28, hwnd, (HMENU)(INT_PTR)IDC_ADD_BTN, GetModuleHandle(nullptr), nullptr);
 
+        // 9. Close Button (Tab order 6)
         g_search_state->hCloseBtn = CreateWindowW(L"BUTTON", L"&Close",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            540, 375, 60, 26, hwnd, (HMENU)(INT_PTR)IDC_CLOSE_BTN, GetModuleHandle(nullptr), nullptr);
+            550, 404, 60, 28, hwnd, (HMENU)(INT_PTR)IDC_CLOSE_BTN, GetModuleHandle(nullptr), nullptr);
 
-        const HWND controls[] = {
-            g_search_state->hQueryEdit, g_search_state->hSearchBtn,
-            g_search_state->hResultsList, g_search_state->hStatusLabel,
-            g_search_state->hPlayBtn, g_search_state->hAddBtn, g_search_state->hCloseBtn
+        // Attach font and keyboard navigation subclass to all interactive controls
+        const HWND focusableControls[] = {
+            g_search_state->hQueryEdit,
+            g_search_state->hSearchBtn,
+            g_search_state->hResultsList,
+            g_search_state->hPlayBtn,
+            g_search_state->hAddBtn,
+            g_search_state->hCloseBtn
         };
-        for (HWND h : controls) {
-            SendMessage(h, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+        for (HWND h : focusableControls) {
+            SendMessageW(h, WM_SETFONT, (WPARAM)hFont, TRUE);
+            SetWindowSubclass(h, DlgControlSubclassProc, SUBCLASS_ID_DLGCTRL, 0);
         }
+
+        SendMessageW(g_search_state->hStatusLabel, WM_SETFONT, (WPARAM)hFont, TRUE);
 
         SetFocus(g_search_state->hQueryEdit);
         return 0;
@@ -190,7 +266,7 @@ LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
 
         if (id == IDC_RESULTS_LIST && code == LBN_DBLCLK) {
-            SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDC_PLAY_BTN, BN_CLICKED), 0);
+            SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(IDC_PLAY_BTN, BN_CLICKED), 0);
             return 0;
         }
 
@@ -229,17 +305,20 @@ LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         for (size_t i = 0; i < g_search_state->results.size(); ++i) {
             const auto& r = g_search_state->results[i];
             wchar_t line[512];
-            swprintf_s(line, L"%zu. %S [%S] (%S)", i + 1, r.title.c_str(), r.channel.c_str(), r.duration_str.c_str());
+            swprintf_s(line, L"%zu. %S by %S (%S)", i + 1, r.title.c_str(), r.channel.c_str(), r.duration_str.c_str());
             SendMessageW(g_search_state->hResultsList, LB_ADDSTRING, 0, (LPARAM)line);
         }
 
-        wchar_t status[128];
-        swprintf_s(status, L"Found %zu results.", g_search_state->results.size());
-        SetWindowTextW(g_search_state->hStatusLabel, status);
+        if (g_search_state->results.empty()) {
+            SetWindowTextW(g_search_state->hStatusLabel, L"No results found. Try a different query.");
+            SetFocus(g_search_state->hQueryEdit);
+        } else {
+            wchar_t status[128];
+            swprintf_s(status, L"Found %zu results.", g_search_state->results.size());
+            SetWindowTextW(g_search_state->hStatusLabel, status);
 
-        if (!g_search_state->results.empty()) {
             SendMessageW(g_search_state->hResultsList, LB_SETCURSEL, 0, 0);
-            // Focus list for screen readers
+            // Shift focus to the list so NVDA speaks the first result immediately!
             SetFocus(g_search_state->hResultsList);
         }
         return 0;
@@ -250,6 +329,7 @@ LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         return 0;
 
     case WM_DESTROY:
+        modeless_dialog_manager::g_remove(hwnd);
         delete g_search_state;
         g_search_state = nullptr;
         return 0;
@@ -262,31 +342,34 @@ LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 LRESULT CALLBACK AddUrlDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_CREATE: {
+        modeless_dialog_manager::g_add(hwnd);
+
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 
-        CreateWindowW(L"STATIC", L"Enter YouTube Video &URL or ID:\n(e.g. https://www.youtube.com/watch?v=... or 11-char ID)",
+        CreateWindowW(L"STATIC", L"Enter YouTube Video &URL or ID:\n(e.g. https://www.youtube.com/watch?v=... or video ID)",
             WS_CHILD | WS_VISIBLE,
             15, 15, 450, 36, hwnd, (HMENU)(INT_PTR)IDC_URL_LABEL, GetModuleHandle(nullptr), nullptr);
 
         HWND hEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-            15, 60, 450, 24, hwnd, (HMENU)(INT_PTR)IDC_URL_EDIT, GetModuleHandle(nullptr), nullptr);
+            15, 60, 450, 25, hwnd, (HMENU)(INT_PTR)IDC_URL_EDIT, GetModuleHandle(nullptr), nullptr);
 
         HWND hPlay = CreateWindowW(L"BUTTON", L"&Play Now",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
-            170, 100, 90, 26, hwnd, (HMENU)(INT_PTR)IDC_URL_PLAY_BTN, GetModuleHandle(nullptr), nullptr);
+            170, 100, 95, 28, hwnd, (HMENU)(INT_PTR)IDC_URL_PLAY_BTN, GetModuleHandle(nullptr), nullptr);
 
         HWND hAdd = CreateWindowW(L"BUTTON", L"&Add to Playlist",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            270, 100, 110, 26, hwnd, (HMENU)(INT_PTR)IDC_URL_ADD_BTN, GetModuleHandle(nullptr), nullptr);
+            275, 100, 115, 28, hwnd, (HMENU)(INT_PTR)IDC_URL_ADD_BTN, GetModuleHandle(nullptr), nullptr);
 
         HWND hCancel = CreateWindowW(L"BUTTON", L"&Cancel",
             WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-            390, 100, 75, 26, hwnd, (HMENU)(INT_PTR)IDC_URL_CANCEL_BTN, GetModuleHandle(nullptr), nullptr);
+            400, 100, 75, 28, hwnd, (HMENU)(INT_PTR)IDC_URL_CANCEL_BTN, GetModuleHandle(nullptr), nullptr);
 
         const HWND controls[] = { hEdit, hPlay, hAdd, hCancel };
         for (HWND h : controls) {
-            SendMessage(h, WM_SETFONT, (WPARAM)hFont, TRUE);
+            SendMessageW(h, WM_SETFONT, (WPARAM)hFont, TRUE);
+            SetWindowSubclass(h, DlgControlSubclassProc, SUBCLASS_ID_DLGCTRL, 0);
         }
 
         SetFocus(hEdit);
@@ -323,6 +406,10 @@ LRESULT CALLBACK AddUrlDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
     case WM_CLOSE:
         DestroyWindow(hwnd);
         return 0;
+
+    case WM_DESTROY:
+        modeless_dialog_manager::g_remove(hwnd);
+        return 0;
     }
 
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -346,15 +433,15 @@ void ShowYouTubeSearchDialog(HWND parent) {
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     RegisterClassExW(&wc);
 
-    int width = 630;
-    int height = 450;
+    int width = 645;
+    int height = 485;
     int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
     int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
 
     HWND hwnd = CreateWindowExW(
-        WS_EX_DLGMODALFRAME,
+        WS_EX_CONTROLPARENT | WS_EX_DLGMODALFRAME | WS_EX_APPWINDOW,
         wc.lpszClassName,
-        L"YouTube Search & Stream (Pipeline)",
+        L"YouTube Search & Stream",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE,
         x, y, width, height,
         parent, nullptr, GetModuleHandle(nullptr), nullptr
@@ -374,13 +461,13 @@ void ShowAddYouTubeURLDialog(HWND parent) {
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     RegisterClassExW(&wc);
 
-    int width = 500;
-    int height = 180;
+    int width = 505;
+    int height = 185;
     int x = (GetSystemMetrics(SM_CXSCREEN) - width) / 2;
     int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
 
     HWND hwnd = CreateWindowExW(
-        WS_EX_DLGMODALFRAME,
+        WS_EX_CONTROLPARENT | WS_EX_DLGMODALFRAME,
         wc.lpszClassName,
         L"Add YouTube URL or ID",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
