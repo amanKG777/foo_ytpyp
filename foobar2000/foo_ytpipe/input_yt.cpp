@@ -46,18 +46,34 @@ public:
             if (m_stream_url.is_empty()) {
                 throw exception_io("No direct stream URL available for video");
             }
-            // Open direct stream through foobar2000 HTTP client
+            // Open direct stream through foobar2000 native HTTP client
             filesystem::g_open(m_file, m_stream_url.c_str(), filesystem::open_mode_read, p_abort);
             // Open the appropriate input decoder (AAC / Opus / WebM / MP4)
             input_entry::g_open_for_decoding(m_decoder, m_file, m_stream_url.c_str(), p_abort);
+            if (m_decoder.is_empty()) {
+                throw exception_io("Failed to initialize internal audio decoder for stream");
+            }
         }
     }
 
+    unsigned get_subsong_count() {
+        return 1;
+    }
+
+    t_uint32 get_subsong(unsigned p_index) {
+        (void)p_index;
+        return 0;
+    }
+
     void get_info(file_info& p_info, abort_callback& p_abort) {
-        (void)p_abort;
-        p_info.meta_set("title", m_title.c_str());
-        p_info.meta_set("artist", m_channel.c_str());
-        p_info.set_length(m_duration);
+        if (m_decoder.is_valid()) {
+            try {
+                m_decoder->get_info(0, p_info, p_abort);
+            } catch (...) {}
+        }
+        if (m_title.length() > 0) p_info.meta_set("title", m_title.c_str());
+        if (m_channel.length() > 0) p_info.meta_set("artist", m_channel.c_str());
+        if (m_duration > 0.0) p_info.set_length(m_duration);
     }
 
     t_filestats2 get_stats2(uint32_t, abort_callback& p_abort) {

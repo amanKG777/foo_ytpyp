@@ -19,14 +19,7 @@ struct SearchItemUI {
     int duration_sec = 0;
 };
 
-// Adds track to foobar2000 playlist and optionally starts playback
-void AddOrPlayYouTubeTrack(const char* id_or_url, bool play_now) {
-    char id[64] = {0};
-    if (!ytpipe_extract_video_id(id_or_url, id, sizeof(id))) {
-        popup_message::g_show("Invalid YouTube URL or Video ID.", "YouTube Source Error");
-        return;
-    }
-
+void AddOrPlayYouTubeTrack(const char* id, bool play_now) {
     pfc::string8 path = PFC_string_formatter() << "youtube://" << id;
     metadb_handle_ptr handle;
     metadb::get()->handle_create(handle, make_playable_location(path.c_str(), 0));
@@ -86,6 +79,14 @@ LRESULT CALLBACK DlgControlSubclassProc(
         // Tell Windows this control participates in keyboard navigation
         LRESULT code = DefSubclassProc(hWnd, uMsg, wParam, lParam);
         return code | DLGC_WANTTAB | DLGC_WANTARROWS;
+    }
+
+    case WM_CHAR: {
+        // Suppress Windows warning beep on Enter or Tab
+        if (wParam == VK_TAB || wParam == VK_RETURN) {
+            return 0;
+        }
+        break;
     }
 
     case WM_KEYDOWN: {
@@ -318,7 +319,6 @@ LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             SetWindowTextW(g_search_state->hStatusLabel, status);
 
             SendMessageW(g_search_state->hResultsList, LB_SETCURSEL, 0, 0);
-            // Shift focus to the list so NVDA speaks the first result immediately!
             SetFocus(g_search_state->hResultsList);
         }
         return 0;
