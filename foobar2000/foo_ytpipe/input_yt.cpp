@@ -19,14 +19,18 @@ static void LogDebug(const char* msg) {
     // 2. Output to foobar2000 console
     console::print((PFC_string_formatter() << "[foo_ytpipe] " << msg).c_str());
 
-    // 3. Output to local debug log file
-    FILE* f = nullptr;
-    if (fopen_s(&f, "C:\\Users\\nab5\\scrubYouTube\\ytpipe_debug.log", "a") == 0 && f) {
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-        fprintf(f, "[%02d:%02d:%02d.%03d] %s\n", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, msg);
-        fflush(f);
-        fclose(f);
+    // 3. Output to temp debug log file
+    char logPath[MAX_PATH] = {0};
+    if (GetTempPathA(sizeof(logPath), logPath) > 0) {
+        strcat_s(logPath, "ytpipe_debug.log");
+        FILE* f = nullptr;
+        if (fopen_s(&f, logPath, "a") == 0 && f) {
+            SYSTEMTIME st;
+            GetLocalTime(&st);
+            fprintf(f, "[%02d:%02d:%02d.%03d] %s\n", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, msg);
+            fflush(f);
+            fclose(f);
+        }
     }
 }
 

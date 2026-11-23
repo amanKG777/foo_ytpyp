@@ -80,9 +80,9 @@ LRESULT CALLBACK DlgControlSubclassProc(
 
     switch (uMsg) {
     case WM_GETDLGCODE: {
-        // Tell Windows this control participates in keyboard navigation
+        // Must include DLGC_WANTALLKEYS and DLGC_WANTCHARS so IsDialogMessage does not swallow Enter or Tab!
         LRESULT code = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        return code | DLGC_WANTTAB | DLGC_WANTARROWS;
+        return code | DLGC_WANTTAB | DLGC_WANTARROWS | DLGC_WANTALLKEYS | DLGC_WANTCHARS;
     }
 
     case WM_CHAR: {
@@ -245,6 +245,16 @@ LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         int id = LOWORD(wParam);
         int code = HIWORD(wParam);
 
+        if (id == IDOK) {
+            HWND hFocus = GetFocus();
+            if (g_search_state && hFocus == g_search_state->hResultsList) {
+                SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(IDC_PLAY_BTN, BN_CLICKED), 0);
+            } else {
+                SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(IDC_SEARCH_BTN, BN_CLICKED), 0);
+            }
+            return 0;
+        }
+
         if (id == IDC_SEARCH_BTN) {
             if (g_search_state->is_searching) return 0;
 
@@ -328,6 +338,14 @@ LRESULT CALLBACK SearchDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         return 0;
     }
 
+    case DM_GETDEFID: {
+        HWND hFocus = GetFocus();
+        if (g_search_state && hFocus == g_search_state->hResultsList) {
+            return MAKELRESULT(IDC_PLAY_BTN, DC_HASDEFID);
+        }
+        return MAKELRESULT(IDC_SEARCH_BTN, DC_HASDEFID);
+    }
+
     case WM_CLOSE:
         DestroyWindow(hwnd);
         return 0;
@@ -382,7 +400,7 @@ LRESULT CALLBACK AddUrlDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
     case WM_COMMAND: {
         int id = LOWORD(wParam);
-        if (id == IDC_URL_PLAY_BTN || id == IDC_URL_ADD_BTN) {
+        if (id == IDOK || id == IDC_URL_PLAY_BTN || id == IDC_URL_ADD_BTN) {
             HWND hEdit = GetDlgItem(hwnd, IDC_URL_EDIT);
             wchar_t wbuf[512] = {0};
             GetWindowTextW(hEdit, wbuf, 512);
@@ -406,6 +424,9 @@ LRESULT CALLBACK AddUrlDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
         break;
     }
+
+    case DM_GETDEFID:
+        return MAKELRESULT(IDC_URL_PLAY_BTN, DC_HASDEFID);
 
     case WM_CLOSE:
         DestroyWindow(hwnd);
