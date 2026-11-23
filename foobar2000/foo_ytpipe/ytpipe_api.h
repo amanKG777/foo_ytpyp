@@ -32,6 +32,28 @@ int ytpipe_get_video_info(
     size_t out_url_max
 );
 
+int ytpipe_get_video_info_ex(
+    const char* video_id,
+    char* out_title,
+    size_t out_title_max,
+    char* out_channel,
+    size_t out_channel_max,
+    int* out_duration_seconds,
+    char* out_stream_url,
+    size_t out_url_max,
+    char* out_mime_type,
+    size_t out_mime_max
+);
+
+int64_t ytpipe_fetch_range(
+    const char* stream_url,
+    uint64_t start_byte,
+    uint64_t end_byte,
+    uint8_t* out_buf,
+    size_t buf_capacity,
+    uint64_t* out_total_size
+);
+
 int ytpipe_search(
     const char* query,
     int max_results,

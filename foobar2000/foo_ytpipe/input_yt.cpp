@@ -1,6 +1,8 @@
 #include "../SDK/foobar2000.h"
 #include "ytpipe_api.h"
 #include <cstdio>
+#include <vector>
+#include <algorithm>
 #include <exception>
 
 namespace {
@@ -28,6 +30,127 @@ static void LogDebug(const char* msg) {
     }
 }
 
+// YouTube Pipeline Scrubbing Stream (HTTP 206 Partial Content Chunk Stream)
+class file_ytpipe : public file_readonly {
+public:
+    file_ytpipe(const char* stream_url, const char* content_type)
+        : m_stream_url(stream_url), m_content_type(content_type), m_position(0), m_total_size(0),
+          m_buffer_start(0), m_buffer_len(0)
+    {
+        // 1 MB buffer for chunk streaming
+        m_buffer.resize(1024 * 1024);
+
+        // Pre-fetch first 1 MB chunk (contains WebM/MP4 header and initial audio packets)
+        FetchChunkAt(0);
+    }
+
+    t_size read(void* p_buffer, t_size p_bytes, abort_callback& p_abort) override {
+        p_abort.check();
+        if (p_bytes == 0) return 0;
+        if (m_total_size > 0 && m_position >= m_total_size) return 0; // EOF
+
+        uint8_t* dst = static_cast<uint8_t*>(p_buffer);
+        t_size total_read = 0;
+
+        while (total_read < p_bytes) {
+            p_abort.check();
+            if (m_total_size > 0 && m_position >= m_total_size) break;
+
+            // Check if current position is inside the buffered chunk
+            if (m_position >= m_buffer_start && m_position < m_buffer_start + m_buffer_len) {
+                t_size in_buf_offset = static_cast<t_size>(m_position - m_buffer_start);
+                t_size in_buf_avail = static_cast<t_size>(m_buffer_len - in_buf_offset);
+                t_size to_copy = (std::min)(p_bytes - total_read, in_buf_avail);
+
+                memcpy(dst + total_read, m_buffer.data() + in_buf_offset, to_copy);
+                m_position += to_copy;
+                total_read += to_copy;
+            } else {
+                // Fetch next chunk starting at m_position
+                if (!FetchChunkAt(m_position)) {
+                    break;
+                }
+            }
+        }
+        return total_read;
+    }
+
+    void seek(t_filesize p_position, abort_callback& p_abort) override {
+        p_abort.check();
+        if (m_total_size > 0 && p_position > m_total_size) {
+            throw exception_io_seek_out_of_range();
+        }
+        m_position = p_position;
+    }
+
+    t_filesize get_size(abort_callback& p_abort) override {
+        p_abort.check();
+        return m_total_size > 0 ? m_total_size : filesize_invalid;
+    }
+
+    t_filesize get_position(abort_callback& p_abort) override {
+        p_abort.check();
+        return m_position;
+    }
+
+    bool can_seek() override {
+        return true;
+    }
+
+    bool get_content_type(pfc::string_base& p_out) override {
+        p_out = m_content_type.c_str();
+        return true;
+    }
+
+    void reopen(abort_callback& p_abort) override {
+        seek(0, p_abort);
+    }
+
+    bool is_remote() override {
+        return true;
+    }
+
+private:
+    bool FetchChunkAt(t_filesize start_pos) {
+        if (m_total_size > 0 && start_pos >= m_total_size) return false;
+
+        t_filesize end_pos = start_pos + m_buffer.size() - 1;
+        if (m_total_size > 0 && end_pos >= m_total_size) {
+            end_pos = m_total_size - 1;
+        }
+
+        uint64_t total = 0;
+        int64_t bytes_fetched = ytpipe_fetch_range(
+            m_stream_url.c_str(),
+            start_pos,
+            end_pos,
+            m_buffer.data(),
+            m_buffer.size(),
+            &total
+        );
+
+        if (bytes_fetched <= 0) {
+            LogDebug((PFC_string_formatter() << "FetchChunkAt failed for range " << start_pos << "-" << end_pos).c_str());
+            return false;
+        }
+
+        m_buffer_start = start_pos;
+        m_buffer_len = static_cast<t_filesize>(bytes_fetched);
+        if (total > 0) {
+            m_total_size = total;
+        }
+        return true;
+    }
+
+    pfc::string8 m_stream_url;
+    pfc::string8 m_content_type;
+    t_filesize m_position;
+    t_filesize m_total_size;
+    t_filesize m_buffer_start;
+    t_filesize m_buffer_len;
+    std::vector<uint8_t> m_buffer;
+};
+
 class input_yt : public input_stubs {
 public:
     void open(service_ptr_t<file> p_filehint, const char* p_path, t_input_open_reason p_reason, abort_callback& p_abort) {
@@ -46,19 +169,21 @@ public:
         char channel[256] = {0};
         int duration_sec = 0;
         char stream_url[4096] = {0};
+        char mime_type[128] = {0};
 
-        int ok = ytpipe_get_video_info(
+        int ok = ytpipe_get_video_info_ex(
             id,
             title, sizeof(title),
             channel, sizeof(channel),
             &duration_sec,
-            stream_url, sizeof(stream_url)
+            stream_url, sizeof(stream_url),
+            mime_type, sizeof(mime_type)
         );
 
-        LogDebug((PFC_string_formatter() << "ytpipe_get_video_info ok=" << ok << ", id=" << id << ", title=" << title << ", duration=" << duration_sec).c_str());
+        LogDebug((PFC_string_formatter() << "ytpipe_get_video_info_ex ok=" << ok << ", id=" << id << ", title=" << title << ", mime=" << mime_type << ", duration=" << duration_sec).c_str());
 
         if (!ok) {
-            LogDebug("ytpipe_get_video_info returned false");
+            LogDebug("ytpipe_get_video_info_ex returned false");
             throw exception_io("Failed to fetch YouTube video metadata or stream URL");
         }
 
@@ -67,6 +192,7 @@ public:
         m_channel = channel;
         m_duration = (double)duration_sec;
         m_stream_url = stream_url;
+        m_mime_type = mime_type;
 
         p_abort.check();
 
@@ -77,63 +203,42 @@ public:
                 throw exception_io("No direct stream URL available for video");
             }
 
-            // 1. Open HTTP stream via foobar2000 http_client
+            // 1. Create pipeline scrubbing file stream
             try {
-                LogDebug((PFC_string_formatter() << "Opening HTTP stream via http_client with url len=" << m_stream_url.length()).c_str());
-                auto client = http_client::get();
-                auto req = client->create_request("GET");
-                req->add_header("User-Agent", "com.google.ios.youtube/21.03.2 (iPhone16,2; U; CPU iOS 18_7_2 like Mac OS X; en_US)");
-                m_file = req->run(m_stream_url.c_str(), p_abort);
-
-                pfc::string8 content_type;
-                m_file->get_content_type(content_type);
-                LogDebug((PFC_string_formatter() << "http_client SUCCESS: is_valid=" << m_file.is_valid()
-                    << ", can_seek=" << m_file->can_seek()
-                    << ", content_type=" << content_type.c_str()
-                    << ", size=" << m_file->get_size(p_abort)).c_str());
+                LogDebug((PFC_string_formatter() << "Creating file_ytpipe for " << m_video_id.c_str()).c_str());
+                m_file = new service_impl_t<file_ytpipe>(m_stream_url.c_str(), m_mime_type.c_str());
+                LogDebug((PFC_string_formatter() << "file_ytpipe created, size=" << m_file->get_size(p_abort)).c_str());
             } catch (const std::exception& e) {
-                LogDebug((PFC_string_formatter() << "http_client threw std::exception: " << e.what()).c_str());
+                LogDebug((PFC_string_formatter() << "Failed to create file_ytpipe: " << e.what()).c_str());
                 throw;
             } catch (...) {
-                LogDebug("http_client threw non-std exception");
+                LogDebug("file_ytpipe threw unknown exception");
                 throw;
             }
 
             // 2. Open internal audio decoder (WebM/Opus or MP4/AAC)
-            pfc::string8 base_hint;
-            if (strstr(m_stream_url.c_str(), "webm") != nullptr || strstr(m_stream_url.c_str(), "opus") != nullptr) {
-                base_hint = "dummy.webm";
+            pfc::string8 hint;
+            if (strstr(m_mime_type.c_str(), "mp4") != nullptr || strstr(m_mime_type.c_str(), "aac") != nullptr) {
+                hint = "dummy.m4a";
             } else {
-                base_hint = "dummy.m4a";
+                hint = "dummy.webm";
             }
 
-            const char* hint_candidates[] = {
-                base_hint.c_str(),
-                (PFC_string_formatter() << "file://" << base_hint.c_str()).c_str(),
-                (PFC_string_formatter() << "C:\\" << base_hint.c_str()).c_str(),
-                m_stream_url.c_str()
-            };
-
-            bool opened = false;
-            for (const char* hint : hint_candidates) {
-                try {
-                    LogDebug((PFC_string_formatter() << "Trying input_entry::g_open_for_decoding with hint: " << hint).c_str());
-                    input_entry::g_open_for_decoding(m_decoder, m_file, hint, p_abort, true);
-                    if (m_decoder.is_valid()) {
-                        LogDebug((PFC_string_formatter() << "g_open_for_decoding succeeded with hint: " << hint).c_str());
-                        opened = true;
-                        break;
-                    }
-                } catch (const std::exception& e) {
-                    LogDebug((PFC_string_formatter() << "g_open_for_decoding with hint " << hint << " threw std::exception: " << e.what()).c_str());
-                } catch (...) {
-                    LogDebug((PFC_string_formatter() << "g_open_for_decoding with hint " << hint << " threw non-std exception").c_str());
-                }
+            try {
+                LogDebug((PFC_string_formatter() << "Opening decoder with hint: " << hint.c_str()).c_str());
+                input_entry::g_open_for_decoding(m_decoder, m_file, hint.c_str(), p_abort, true);
+                LogDebug((PFC_string_formatter() << "g_open_for_decoding finished, decoder valid=" << m_decoder.is_valid()).c_str());
+            } catch (const std::exception& e) {
+                LogDebug((PFC_string_formatter() << "g_open_for_decoding threw std::exception: " << e.what()).c_str());
+                throw;
+            } catch (...) {
+                LogDebug("g_open_for_decoding threw non-std exception");
+                throw;
             }
 
-            if (!opened || m_decoder.is_empty()) {
-                LogDebug("All decoder hint attempts failed!");
-                throw exception_io("Failed to initialize internal audio decoder for YouTube stream");
+            if (m_decoder.is_empty()) {
+                LogDebug("m_decoder is empty after g_open_for_decoding!");
+                throw exception_io("Failed to initialize audio decoder for stream");
             }
         }
     }
@@ -158,8 +263,8 @@ public:
         if (m_title.length() > 0) p_info.meta_set("title", m_title.c_str());
         if (m_channel.length() > 0) p_info.meta_set("artist", m_channel.c_str());
         if (m_duration > 0.0) p_info.set_length(m_duration);
-        if (m_stream_url.length() > 0) {
-            if (strstr(m_stream_url.c_str(), "webm") != nullptr || strstr(m_stream_url.c_str(), "opus") != nullptr) {
+        if (m_mime_type.length() > 0) {
+            if (strstr(m_mime_type.c_str(), "webm") != nullptr || strstr(m_mime_type.c_str(), "opus") != nullptr) {
                 p_info.info_set("codec", "Opus");
                 p_info.info_set("encoding", "lossy");
             } else {
@@ -294,6 +399,7 @@ private:
     pfc::string8 m_channel;
     double m_duration = 0.0;
     pfc::string8 m_stream_url;
+    pfc::string8 m_mime_type;
 
     service_ptr_t<file> m_file;
     service_ptr_t<input_decoder> m_decoder;
