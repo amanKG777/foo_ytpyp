@@ -20,6 +20,10 @@ struct SearchItemUI {
 };
 
 void AddOrPlayYouTubeTrack(const char* id, bool play_now) {
+    char clean_id[64] = {0};
+    if (ytpipe_extract_video_id(id, clean_id, sizeof(clean_id))) {
+        id = clean_id;
+    }
     pfc::string8 path = PFC_string_formatter() << "youtube://" << id;
     metadb_handle_ptr handle;
     metadb::get()->handle_create(handle, make_playable_location(path.c_str(), 0));

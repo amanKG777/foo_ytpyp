@@ -65,7 +65,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>../shared/shared-$(Platform).lib;../../ytpipe_core/target/release/ytpipe_core.dll.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../shared/shared-$(Platform).lib;../../ytpipe_core/target/release/ytpipe_core.lib;ws2_32.lib;crypt32.lib;userenv.lib;bcrypt.lib;ntdll.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -85,7 +85,7 @@
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <AdditionalDependencies>../shared/shared-$(Platform).lib;../../ytpipe_core/target/release/ytpipe_core.dll.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>../shared/shared-$(Platform).lib;../../ytpipe_core/target/release/ytpipe_core.lib;ws2_32.lib;crypt32.lib;userenv.lib;bcrypt.lib;ntdll.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
