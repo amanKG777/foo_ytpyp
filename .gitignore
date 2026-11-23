@@ -34,3 +34,7 @@ Thumbs.db
 Desktop.ini
 
 scratch/
+libs/
+classpath.txt
+*.class
+TestNewPipe*
