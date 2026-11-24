@@ -117,6 +117,49 @@ Tip: you can give either menu item a keyboard shortcut in **Preferences > Keyboa
 
 ---
 
+## Building it yourself
+
+### You'll need
+
+- Visual Studio 2022 or newer, with the "Desktop development with C++" workload
+- The Rust toolchain for `x86_64-pc-windows-msvc`
+
+### Steps
+
+Run these from **PowerShell** or a Visual Studio developer prompt, in the repository folder.
+
+1. Build the Rust library:
+   ```powershell
+   cargo build --release --manifest-path "ytpipe_core\Cargo.toml"
+   ```
+2. Build the foobar2000 component:
+   ```powershell
+   & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" "foobar2000\foo_ytpipe\foo_ytpipe.vcxproj" /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v145
+   ```
+   Change the MSBuild path and `PlatformToolset` to match your Visual Studio version if needed (v143 for VS 2022).
+3. Package it:
+   ```powershell
+   Compress-Archive -Path "foobar2000\foo_ytpipe\x64\Release\foo_ytpipe.dll" -DestinationPath "foo_ytpyp.zip" -Force
+   Move-Item "foo_ytpyp.zip" "foo_ytpyp.fb2k-component" -Force
+   ```
+
+### Tests
+
+- `cargo test --release` runs the offline tests, such as link parsing.
+- `cargo test --release -- --include-ignored` also runs live tests against YouTube: search, paging, playlists, channels, mixes and actual audio fetching. It's a quick way to check whether YouTube has changed something.
+
+### Where things are
+
+- `ytpipe_core/src/innertube.rs` finds stream links, picks formats, caches links and fetches audio pieces.
+- `ytpipe_core/src/browse.rs` handles search, playlists, mixes and channels.
+- `ytpipe_core/src/lib.rs` is the C interface the foobar2000 component calls.
+- `foobar2000/foo_ytpipe/input_yt.cpp` is the foobar2000 input and the streaming "file".
+- `foobar2000/foo_ytpipe/ui_dialog.cpp` contains the Search and Add URL windows.
+- `foobar2000/foo_ytpipe/menu.cpp` adds the File > YouTube menu.
+- The `foobar2000/`, `pfc/`, `libPPUI/` and `wtl/` folders hold the foobar2000 SDK and its supporting libraries.
+
+---
+
 ## Credits
 
 The idea of talking to YouTube's app API directly, instead of shelling out to yt-dlp, comes from **FukeX**, and the approach to YouTube's app clients follows ideas from **NewPipe**.
