@@ -1,0 +1,3 @@
+[submodule "ytpipe_core"]
+	path = ytpipe_core
+	url = https://github.com/amanKG777/lib_YTPYP.git
