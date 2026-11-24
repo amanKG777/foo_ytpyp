@@ -175,4 +175,4 @@ Then run these from **PowerShell** or a Visual Studio developer prompt, in the r
 
 ## Credits
 
-The idea of talking to YouTube's app API directly, instead of shelling out to yt-dlp, comes from **FukeX**, and the approach to YouTube's app clients follows ideas from **NewPipe**.
+The idea of talking to YouTube's app API directly, instead of shelling out to yt-dlp, comes from [**FukeX**](https://github.com/amankg777/fukex), and the approach to YouTube's app clients follows ideas from **NewPipe**.
