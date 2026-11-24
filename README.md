@@ -126,7 +126,7 @@ Tip: you can give either menu item a keyboard shortcut in **Preferences > Keyboa
 
 ### Steps
 
-Clone the repo with submodules (the `ytpipe_core` submodule is currently private):
+Clone the repo with submodules:
 
 ```powershell
 git clone --recurse-submodules https://github.com/amanKG777/foo_ytpyp.git
