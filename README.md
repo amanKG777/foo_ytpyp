@@ -74,7 +74,7 @@ These use the same InnerTube API, this time asking the way the website does. Sea
 
 ### What's inside
 
-- **`ytpipe_core`** is a small library written in Rust. It does all the talking to YouTube: finding stream links, searching, loading playlists and channels, and fetching audio pieces.
+- **`ytpipe_core`** is a small library written in Rust. It lives in its own repository ([lib_YTPYP](https://github.com/amanKG777/lib_YTPYP)) and is pulled in here as a git submodule. It does all the talking to YouTube: finding stream links, searching, loading playlists and channels, and fetching audio pieces.
 - **`foo_ytpipe`** is the foobar2000 part, written in C++. It plugs the library into foobar2000 as an input (so `youtube://` tracks play like files) and provides the menu items and the two accessible windows.
 
 ### The honest trade-off
@@ -126,7 +126,19 @@ Tip: you can give either menu item a keyboard shortcut in **Preferences > Keyboa
 
 ### Steps
 
-Run these from **PowerShell** or a Visual Studio developer prompt, in the repository folder.
+Clone the repo with submodules (the `ytpipe_core` submodule is currently private):
+
+```powershell
+git clone --recurse-submodules https://github.com/amanKG777/foo_ytpyp.git
+```
+
+If you already cloned without `--recurse-submodules`, fetch it first:
+
+```powershell
+git submodule update --init --recursive
+```
+
+Then run these from **PowerShell** or a Visual Studio developer prompt, in the repository folder.
 
 1. Build the Rust library:
    ```powershell
@@ -150,9 +162,10 @@ Run these from **PowerShell** or a Visual Studio developer prompt, in the reposi
 
 ### Where things are
 
-- `ytpipe_core/src/innertube.rs` finds stream links, picks formats, caches links and fetches audio pieces.
-- `ytpipe_core/src/browse.rs` handles search, playlists, mixes and channels.
-- `ytpipe_core/src/lib.rs` is the C interface the foobar2000 component calls.
+- `ytpipe_core/` is a git submodule from `lib_YTPYP` containing the Rust core:
+  - `ytpipe_core/src/innertube.rs` finds stream links, picks formats, caches links and fetches audio pieces.
+  - `ytpipe_core/src/browse.rs` handles search, playlists, mixes and channels.
+  - `ytpipe_core/src/lib.rs` is the C interface the foobar2000 component calls.
 - `foobar2000/foo_ytpipe/input_yt.cpp` is the foobar2000 input and the streaming "file".
 - `foobar2000/foo_ytpipe/ui_dialog.cpp` contains the Search and Add URL windows.
 - `foobar2000/foo_ytpipe/menu.cpp` adds the File > YouTube menu.
