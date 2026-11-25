@@ -49,37 +49,11 @@ Your old playlists keep working. foo_youtube saved tracks as `fy+https://www.you
 
 ---
 
-## How it works (and how it's different from yt-dlp)
+## How it works
 
-Most YouTube players for desktop apps run **yt-dlp** behind the scenes. yt-dlp is great, but it's a big separate program. It needs regular updates, and because of the way YouTube scrambles its links, it now needs a JavaScript runtime too. foo_ytpyp takes a much shorter path.
+All the talking to YouTube is done by **`ytpipe_core`**, a small Rust library that lives in its own repository, [lib_YTPYP](https://github.com/amanKG777/lib_YTPYP), and is pulled in here as a git submodule. See its README for how it gets stream links without yt-dlp, how streaming and seeking work, and the trade-offs involved.
 
-### Getting a playable link
-
-When you play a video, YouTube has to hand over a link to the actual audio file on its servers (googlevideo.com). How that link comes back depends on who's asking:
-
-- **The YouTube website** gets links that are scrambled. Unscrambling them means downloading YouTube's player JavaScript and running parts of it. That's most of what yt-dlp does, and it's why yt-dlp breaks whenever YouTube changes that code.
-- **YouTube's own apps** (iPhone, Vision Pro, Android VR headsets) talk to YouTube through its internal app API, called InnerTube. For many of these apps, YouTube sends back plain, ready-to-use links.
-
-foo_ytpyp asks the way those apps do. It first gets a normal anonymous visitor session from YouTube, just like a freshly installed app would. Then it requests the video as the Vision Pro app. If that doesn't work, it tries the iPhone app and then the Android VR app. Whichever answers first wins. No JavaScript is run and nothing is unscrambled. It's one small web request, usually well under a second.
-
-### Streaming instead of downloading
-
-yt-dlp-based players usually download the whole audio file, or pipe it through another program, before or while it plays. foo_ytpyp never downloads the whole thing. It reads the audio in 1 MB pieces, asking YouTube's servers for "bytes 5,000,000 to 6,000,000" and so on (this is called an HTTP range request). foobar2000 sees what looks like an ordinary file and decodes it itself.
-
-That's why seeking is instant. Jumping to 45:00 in a mix just means asking for the piece at that spot, not waiting for everything before it to arrive.
-
-### Search, playlists and channels
-
-These use the same InnerTube API, this time asking the way the website does. Search results, playlist contents and channel uploads aren't scrambled, so no extra work is needed. Long playlists and channels come in pages of about 100, and the plugin keeps asking for the next page until it has the lot (up to 5,000 videos).
-
-### What's inside
-
-- **`ytpipe_core`** is a small library written in Rust. It lives in its own repository ([lib_YTPYP](https://github.com/amanKG777/lib_YTPYP)) and is pulled in here as a git submodule. It does all the talking to YouTube: finding stream links, searching, loading playlists and channels, and fetching audio pieces.
-- **`foo_ytpipe`** is the foobar2000 part, written in C++. It plugs the library into foobar2000 as an input (so `youtube://` tracks play like files) and provides the menu items and the two accessible windows.
-
-### The honest trade-off
-
-This only works as long as YouTube keeps handing those app clients plain links. yt-dlp has a big team chasing every YouTube change. This is one small project. If YouTube locks things down, playback may stop working until the plugin is updated. To soften that, there are three different app clients to fall back on, and they can be swapped out quickly when one stops working.
+This repository is the foobar2000 part, **`foo_ytpipe`**, written in C++. It plugs the library into foobar2000 as an input (so `youtube://` tracks play like files) and provides the menu items and the two accessible windows.
 
 ---
 
@@ -140,7 +114,7 @@ git submodule update --init --recursive
 
 Then run these from **PowerShell** or a Visual Studio developer prompt, in the repository folder.
 
-1. Build the Rust library:
+1. Build the Rust library (see the [lib_YTPYP README](https://github.com/amanKG777/lib_YTPYP) for details and its tests):
    ```powershell
    cargo build --release --manifest-path "ytpipe_core\Cargo.toml"
    ```
@@ -155,17 +129,9 @@ Then run these from **PowerShell** or a Visual Studio developer prompt, in the r
    Move-Item "foo_ytpyp.zip" "foo_ytpyp.fb2k-component" -Force
    ```
 
-### Tests
-
-- `cargo test --release` runs the offline tests, such as link parsing.
-- `cargo test --release -- --include-ignored` also runs live tests against YouTube: search, paging, playlists, channels, mixes and actual audio fetching. It's a quick way to check whether YouTube has changed something.
-
 ### Where things are
 
-- `ytpipe_core/` is a git submodule from `lib_YTPYP` containing the Rust core:
-  - `ytpipe_core/src/innertube.rs` finds stream links, picks formats, caches links and fetches audio pieces.
-  - `ytpipe_core/src/browse.rs` handles search, playlists, mixes and channels.
-  - `ytpipe_core/src/lib.rs` is the C interface the foobar2000 component calls.
+- `ytpipe_core/` is the [lib_YTPYP](https://github.com/amanKG777/lib_YTPYP) submodule (the Rust core).
 - `foobar2000/foo_ytpipe/input_yt.cpp` is the foobar2000 input and the streaming "file".
 - `foobar2000/foo_ytpipe/ui_dialog.cpp` contains the Search and Add URL windows.
 - `foobar2000/foo_ytpipe/menu.cpp` adds the File > YouTube menu.
