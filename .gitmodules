@@ -1,3 +1,6 @@
 [submodule "ytpipe_core"]
 	path = ytpipe_core
 	url = https://github.com/amanKG777/lib_YTPYP.git
+[submodule "foosdk"]
+	path = foosdk
+	url = https://github.com/hyperblast/foosdk
