@@ -142,3 +142,25 @@ Then run these from **PowerShell** or a Visual Studio developer prompt, in the r
 ## Credits
 
 The idea of talking to YouTube's app API directly, instead of shelling out to yt-dlp, comes from [**FukeX**](https://github.com/amankg777/fukex), and the approach to YouTube's app clients follows ideas from **NewPipe**.
+
+---
+
+## License
+
+foo_ytpyp is free and open-source software, released under the **MIT License**. You are free to use, copy, modify and redistribute it, including in commercial projects, as long as the copyright notice and license text are kept. See [`LICENSE`](LICENSE) for the full text.
+
+Copyright © 2026 Aman Kumar Gupta.
+
+### Third-party components
+
+This repository also contains code from other projects, which keep their own licenses:
+
+| Component | License | Where |
+|---|---|---|
+| [lib_YTPYP](https://github.com/amanKG777/lib_YTPYP) (`ytpipe_core`) | MIT | [`ytpipe_core/LICENSE`](https://github.com/amanKG777/lib_YTPYP/blob/main/LICENSE) |
+| foobar2000 SDK | BSD-3-Clause style | [`sdk-license.txt`](sdk-license.txt) |
+| pfc | zlib | [`pfc/pfc-license.txt`](pfc/pfc-license.txt) |
+| libPPUI | zlib | [`libPPUI/libPPUI-license.txt`](libPPUI/libPPUI-license.txt) |
+| WTL (Windows Template Library) | MS-PL | [`wtl/Notes/MS-PL.txt`](wtl/Notes/MS-PL.txt) |
+
+foo_ytpyp is not affiliated with or endorsed by YouTube, Google or the foobar2000 project.
