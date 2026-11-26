@@ -73,7 +73,7 @@ YouTube changes its internal workings often and without warning, so this plugin 
 
 ## Installing
 
-1. Download `foo_ytpyp.fb2k-component`.
+1. Download `foo_ytpyp-<version>.fb2k-component` from the [latest release](https://github.com/amanKG777/foo_ytpyp/releases/latest).
 2. Double-click it. Or, in foobar2000, go to **Preferences > Components > Install...** and pick the file.
 3. Restart foobar2000 when it asks.
 4. You'll find everything under **File > YouTube**:
@@ -95,7 +95,8 @@ Tip: you can give either menu item a keyboard shortcut in **Preferences > Keyboa
 
 ### You'll need
 
-- Visual Studio 2022 or newer, with the "Desktop development with C++" workload
+- Visual Studio 2022 or newer (or just the Build Tools), with the "Desktop development with C++" workload
+- CMake 3.24 or newer
 - The Rust toolchain for `x86_64-pc-windows-msvc`
 
 ### Steps
@@ -104,38 +105,35 @@ Clone the repo with submodules:
 
 ```powershell
 git clone --recurse-submodules https://github.com/amanKG777/foo_ytpyp.git
+cd foo_ytpyp
 ```
 
-If you already cloned without `--recurse-submodules`, fetch it first:
+If you already cloned without `--recurse-submodules`, fetch them first:
 
 ```powershell
 git submodule update --init --recursive
 ```
 
-Then run these from **PowerShell** or a Visual Studio developer prompt, in the repository folder.
+Then build:
 
-1. Build the Rust library (see the [lib_YTPYP README](https://github.com/amanKG777/lib_YTPYP) for details and its tests):
-   ```powershell
-   cargo build --release --manifest-path "ytpipe_core\Cargo.toml"
-   ```
-2. Build the foobar2000 component:
-   ```powershell
-   & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" "foobar2000\foo_ytpipe\foo_ytpipe.vcxproj" /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v145
-   ```
-   Change the MSBuild path and `PlatformToolset` to match your Visual Studio version if needed (v143 for VS 2022).
-3. Package it:
-   ```powershell
-   Compress-Archive -Path "foobar2000\foo_ytpipe\x64\Release\foo_ytpipe.dll" -DestinationPath "foo_ytpyp.zip" -Force
-   Move-Item "foo_ytpyp.zip" "foo_ytpyp.fb2k-component" -Force
-   ```
+```powershell
+cmake -B build
+cmake --build build --config Release
+```
+
+This builds the Rust library with cargo, builds the component, and packages it. You'll find `build\Release\foo_ytpyp.fb2k-component` ready to install (and `foo_ytpipe.dll` next to it).
+
+For the Rust library's own tests, see the [lib_YTPYP README](https://github.com/amanKG777/lib_YTPYP).
 
 ### Where things are
 
+- `src/input_yt.cpp` is the foobar2000 input and the streaming "file".
+- `src/ui_dialog.cpp` contains the Search and Add URL windows.
+- `src/menu.cpp` adds the File > YouTube menu.
+- `src/ytpipe_api.h` is the C interface to the Rust library.
 - `ytpipe_core/` is the [lib_YTPYP](https://github.com/amanKG777/lib_YTPYP) submodule (the Rust core).
-- `foobar2000/foo_ytpipe/input_yt.cpp` is the foobar2000 input and the streaming "file".
-- `foobar2000/foo_ytpipe/ui_dialog.cpp` contains the Search and Add URL windows.
-- `foobar2000/foo_ytpipe/menu.cpp` adds the File > YouTube menu.
-- The `foobar2000/`, `pfc/`, `libPPUI/` and `wtl/` folders hold the foobar2000 SDK and its supporting libraries.
+- `foosdk/` is the [foosdk](https://github.com/hyperblast/foosdk) submodule: the foobar2000 SDK with a CMake build.
+- `CMakeLists.txt` ties it all together.
 
 ---
 
@@ -153,14 +151,12 @@ Copyright © 2026 Aman Kumar Gupta.
 
 ### Third-party components
 
-This repository also contains code from other projects, which keep their own licenses:
+foo_ytpyp is built with code from other projects, pulled in as git submodules, which keep their own licenses:
 
 | Component | License | Where |
 |---|---|---|
 | [lib_YTPYP](https://github.com/amanKG777/lib_YTPYP) (`ytpipe_core`) | MIT | [`ytpipe_core/LICENSE`](https://github.com/amanKG777/lib_YTPYP/blob/main/LICENSE) |
-| foobar2000 SDK | BSD-3-Clause style | [`sdk-license.txt`](sdk-license.txt) |
-| pfc | zlib | [`pfc/pfc-license.txt`](pfc/pfc-license.txt) |
-| libPPUI | zlib | [`libPPUI/libPPUI-license.txt`](libPPUI/libPPUI-license.txt) |
-| WTL (Windows Template Library) | MS-PL | [`wtl/Notes/MS-PL.txt`](wtl/Notes/MS-PL.txt) |
+| [foosdk](https://github.com/hyperblast/foosdk) (CMake build of the foobar2000 SDK) | MIT | [`foosdk/LICENSE`](https://github.com/hyperblast/foosdk/blob/master/LICENSE) |
+| foobar2000 SDK, including pfc | BSD-3-Clause style / zlib | [`foosdk/sdk/sdk-license.txt`](https://github.com/hyperblast/foosdk/blob/master/sdk/sdk-license.txt) |
 
 foo_ytpyp is not affiliated with or endorsed by YouTube, Google or the foobar2000 project.
